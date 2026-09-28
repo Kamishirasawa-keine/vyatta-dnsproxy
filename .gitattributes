@@ -1,0 +1,6 @@
+* text=auto eol=lf
+
+*.deb binary
+*.gz binary
+*.png binary
+*.jpg binary

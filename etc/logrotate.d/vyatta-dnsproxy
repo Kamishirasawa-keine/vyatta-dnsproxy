@@ -1,0 +1,23 @@
+# Rotate the dnsproxy log file.
+#
+# dnsproxy has no signal with which to reopen its log file, so copytruncate is
+# used instead of a postrotate/kill sequence.  copytruncate keeps the inode and
+# its ownership intact, which is why no "create" directive is needed.
+#
+# Trigger: rotate once a week, but only if the file has reached 1 MiB.
+# "minsize" is the correct directive here - using "size 1M" together with a
+# time interval such as "weekly" would override the interval and the file would
+# be rotated purely by size.
+#
+# The file is owned by root because dnsproxy runs as root; revisit this if the
+# daemon is ever changed to drop privileges (see docs/code-review.md I15).
+/var/log/dnsproxy.log {
+    weekly
+    minsize 1M
+    rotate 5
+    missingok
+    notifempty
+    compress
+    delaycompress
+    copytruncate
+}

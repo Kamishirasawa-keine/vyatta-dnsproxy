@@ -1,0 +1,6 @@
+multi:
+type: txt
+help: Listen address
+syntax:expression: exec "/opt/vyatta/sbin/is_valid_address.pl $VAR(@)"
+val_help: ipv4; IPv4 address to listen on
+val_help: ipv6; IPv6 address to listen on

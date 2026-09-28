@@ -1,0 +1,12 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|upgrade|deconfigure)
+        if [ -x /opt/vyatta/sbin/vyatta-dnsproxy.pl ]; then
+            /opt/vyatta/sbin/vyatta-dnsproxy.pl --stop-dnsproxy || true
+        fi
+        ;;
+esac
+
+exit 0

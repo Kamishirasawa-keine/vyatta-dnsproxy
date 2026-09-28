@@ -1,0 +1,37 @@
+version: 2
+
+updates:
+    # GitHub Actions used by the workflows in .github/workflows.
+    #
+    # Dependency scope
+    # ---------------
+    # This is the only dependency Dependabot can see: the repository has no
+    # go.mod, no lockfile and no Dockerfile.  AdGuard dnsproxy is not declared
+    # in any manifest - the build workflow checks it out by release tag - so
+    # Dependabot cannot track it.  That dependency is watched by
+    # .github/workflows/upstream-check.yml instead.
+    - package-ecosystem: github-actions
+      directory: /
+      # The repository's only long-lived branch.
+      target-branch: master
+      schedule:
+          interval: weekly
+          day: monday
+          # Keep the window away from the start of the working day.
+          time: "06:00"
+          timezone: Asia/Shanghai
+      open-pull-requests-limit: 5
+      labels:
+          - dependencies
+          - github-actions
+      # Commit convention: "chore(deps)" prefix, scope included, so that these
+      # commits are grouped in git log and separable from functional changes.
+      commit-message:
+          prefix: "chore(deps)"
+          include: scope
+      # One pull request for all Action bumps: they are upgraded, reviewed and
+      # tested together and rarely conflict, so separate PRs are just noise.
+      groups:
+          github-actions:
+              patterns:
+                  - "*"

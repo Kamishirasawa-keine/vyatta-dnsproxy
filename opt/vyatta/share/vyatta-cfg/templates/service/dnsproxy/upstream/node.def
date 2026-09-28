@@ -1,0 +1,9 @@
+multi:
+type: txt
+help: Upstream servers
+val_help: ipv4/ipv6; Plain DNS server address, e.g. 8.8.8.8
+val_help: <addr>:<port>; Server with explicit port, e.g. 1.1.1.1:53
+val_help: tls://<host>; DNS-over-TLS, e.g. tls://dns.adguard.com
+val_help: https://<url>; DNS-over-HTTPS, e.g. https://dns.google/dns-query
+val_help: quic://<host>; DNS-over-QUIC
+val_help: [/<domain>/]<addr>; Upstream used only for the given domain

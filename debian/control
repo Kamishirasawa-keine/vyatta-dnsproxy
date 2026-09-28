@@ -3,3 +3,6 @@ Version: __VERSION__-__PACKAGE_RELEASE__
 Architecture: __ARCH__
 Maintainer: Kamishirasawa-keine <kurisu3a0f@outlook.com>
 Section: net
+Priority: optional
+Depends: perl, procps
+Description: dnsproxy port for EdgeOS

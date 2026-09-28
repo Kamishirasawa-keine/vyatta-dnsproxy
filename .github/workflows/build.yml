@@ -68,20 +68,65 @@ jobs:
                 PKG_DIR: "build/${{ env.PACKAGE_NAME }}-${{ matrix.arch }}-v${{ env.VERSION }}-${{ env.PACKAGE_RELEASE }}"
               run: |
                 set -eux
-                mkdir build
-                mkdir -p ${PKG_DIR} \
+                mkdir -p build \
                     ${PKG_DIR}/DEBIAN \
                     ${PKG_DIR}/usr/bin \
-                    ${PKG_DIR}/opt
+                    ${PKG_DIR}/opt \
+                    ${PKG_DIR}/etc/logrotate.d
+
                 install -m 0755 dnsproxy/build/dnsproxy ${PKG_DIR}/usr/bin/dnsproxy
+
+                # opt/ mirrors /opt/; the executable bit is preserved from git,
+                # which is why the glue script must be committed as 100755.
                 cp -a opt/. ${PKG_DIR}/opt/
+
+                install -m 0644 etc/logrotate.d/vyatta-dnsproxy \
+                    ${PKG_DIR}/etc/logrotate.d/vyatta-dnsproxy
+
                 sed \
                     -e "s/__PACKAGE_NAME__/${{ env.PACKAGE_NAME }}/g" \
                     -e "s/__VERSION__/${{ env.VERSION }}/g" \
                     -e "s/__PACKAGE_RELEASE__/${{ env.PACKAGE_RELEASE }}/g" \
                     -e "s/__ARCH__/${{ matrix.arch }}/g" \
                     debian/control > ${PKG_DIR}/DEBIAN/control
+
+                install -m 0644 debian/conffiles ${PKG_DIR}/DEBIAN/conffiles
+                install -m 0755 debian/prerm      ${PKG_DIR}/DEBIAN/prerm
+                install -m 0755 debian/postrm     ${PKG_DIR}/DEBIAN/postrm
+                install -m 0755 debian/postinst   ${PKG_DIR}/DEBIAN/postinst
+
                 dpkg-deb --build -Zgzip --root-owner-group ${PKG_DIR} ${{ env.PACKAGE_NAME }}-${{ matrix.arch }}-v${{ env.VERSION }}-${{ env.PACKAGE_RELEASE }}.deb
+            - name: Inspect package
+              run: |
+                set -eux
+                dpkg-deb -I *.deb
+
+                # Mandatory and expected control fields.
+                for field in Package Version Architecture Maintainer Section \
+                             Priority Depends Description; do
+                    dpkg-deb -f *.deb "$field" > /dev/null
+                done
+                test "$(dpkg-deb -f *.deb Priority)" = "optional"
+
+                # Maintenance scripts and conffiles must actually ship.
+                ctrl=$(dpkg-deb --ctrl-tarfile *.deb | tar -t)
+                for f in control conffiles prerm postrm postinst; do
+                    printf '%s\n' "$ctrl" | grep -qx "./$f" \
+                        || { echo "missing DEBIAN/$f"; exit 1; }
+                done
+
+                # Payload assertions: the logrotate config, and - guarding the
+                # regression fixed by B3 - an executable glue script.
+                dpkg-deb -c *.deb | grep -q 'etc/logrotate.d/vyatta-dnsproxy'
+                dpkg-deb -c *.deb \
+                    | grep -q -- '-rwxr-xr-x root/root.*opt/vyatta/sbin/vyatta-dnsproxy.pl'
+
+                # The templates must be installed under 'service' (singular).
+                dpkg-deb -c *.deb | grep -q 'templates/service/dnsproxy/node.def'
+                if dpkg-deb -c *.deb | grep -q 'templates/services/'; then
+                    echo "templates installed under 'services' (plural)" >&2
+                    exit 1
+                fi
             - name: Gen checksum
               run: |
                 set -eux

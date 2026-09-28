@@ -1,0 +1,6 @@
+type: u32
+default: 10000
+help: DNS cache size in entries
+syntax:expression: ($VAR(@) >= 0 && $VAR(@) <= 10000) ; "Cache size must be between 0 and 10000 entries"
+val_help: u32:0-10000; Maximum number of cached DNS records (0 disables caching)
+comp_help: Same unit as 'service dns forwarding cache-size'.  Converted to bytes for dnsproxy using 256 bytes per entry with a 64 KiB floor.

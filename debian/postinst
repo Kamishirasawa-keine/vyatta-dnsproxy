@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    configure)
+        # An upgrade replaces /opt/vyatta/sbin/vyatta-dnsproxy.pl but does not
+        # re-run a configuration commit, so the daemon would stay down until
+        # the next commit or reboot.  Restart it from the committed (active)
+        # configuration instead.  The script exits 0 without doing anything
+        # when 'service dnsproxy' is not configured.
+        if [ -x /opt/vyatta/sbin/vyatta-dnsproxy.pl ]; then
+            /opt/vyatta/sbin/vyatta-dnsproxy.pl --update-dnsproxy --outside-cli || true
+        fi
+        ;;
+esac
+
+exit 0

@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+case "$1" in
+    remove|purge)
+        rm -f /var/run/dnsproxy.pid /var/run/dnsproxy.args /var/run/dnsproxy.args.tmp
+        ;;
+esac
+
+exit 0

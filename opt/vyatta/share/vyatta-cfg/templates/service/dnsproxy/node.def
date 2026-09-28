@@ -1,0 +1,11 @@
+priority: 918
+help: dnsproxy
+
+delete:expression: "touch /tmp/dnsproxy.$PPID"
+
+end:expression: "if [ -f \"/tmp/dnsproxy.$PPID\" ]; then \
+        sudo /opt/vyatta/sbin/vyatta-dnsproxy.pl --stop-dnsproxy; \
+        rm -f /tmp/dnsproxy.$PPID; \
+      else \
+        sudo /opt/vyatta/sbin/vyatta-dnsproxy.pl --update-dnsproxy; \
+      fi; "

@@ -1,0 +1,135 @@
+name: Upstream dnsproxy check
+
+# Dependabot cannot see AdGuard dnsproxy: it is not declared in any manifest,
+# the build workflow checks it out by release tag.  This scheduled job covers
+# that gap.  It answers two questions:
+#
+#   1. is a newer upstream release available?  (informational)
+#   2. do the upstream CLI options this port depends on still exist with the
+#      same semantics?  (a real regression guard)
+#
+# Question 2 is the important one.  The port translates the EdgeOS CLI into
+# dnsproxy command line arguments, so a renamed or removed option - or a change
+# of the --cache-size unit - would silently break it.
+
+on:
+    schedule:
+        # Mondays 02:00 UTC, an hour before the Dependabot run.
+        - cron: "0 2 * * 1"
+    workflow_dispatch:
+
+permissions:
+    contents: read
+
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+
+            - name: Read the pinned upstream version
+              id: pinned
+              run: |
+                set -eux
+                ver=$(sed -n 's/^[[:space:]]*VERSION:[[:space:]]*"\([^"]*\)".*/\1/p' \
+                        .github/workflows/build.yml | head -1)
+                test -n "$ver"
+                echo "version=$ver" >> "$GITHUB_OUTPUT"
+
+            - name: Look up the latest upstream release
+              id: latest
+              env:
+                GH_TOKEN: ${{ github.token }}
+              run: |
+                set -eux
+                tag=$(curl -fsSL \
+                        -H "Authorization: Bearer $GH_TOKEN" \
+                        -H "Accept: application/vnd.github+json" \
+                        https://api.github.com/repos/AdguardTeam/dnsproxy/releases/latest \
+                      | grep -m1 '"tag_name"' \
+                      | sed 's/.*"tag_name":[[:space:]]*"v\{0,1\}\([^"]*\)".*/\1/')
+                test -n "$tag"
+                echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+            - name: Compare
+              run: |
+                set -eu
+                pinned='${{ steps.pinned.outputs.version }}'
+                latest='${{ steps.latest.outputs.version }}'
+                {
+                    echo "## Upstream dnsproxy"
+                    echo
+                    echo "| | version |"
+                    echo "|---|---|"
+                    echo "| pinned by this port | \`$pinned\` |"
+                    echo "| latest upstream release | \`$latest\` |"
+                } >> "$GITHUB_STEP_SUMMARY"
+
+                if [ "$pinned" != "$latest" ]; then
+                    echo "::warning::dnsproxy $latest is available, this port pins $pinned"
+                    echo
+                    echo "A newer upstream release is available.  Bump \`VERSION\` in"
+                    echo "\`.github/workflows/build.yml\` after reviewing the changes and"
+                    echo "confirming the CLI contract check below still passes."
+                    echo
+                fi
+
+            # Assert the CLI contract against the *latest* release, so that a
+            # breaking upstream change surfaces before a version bump is made.
+            - name: Checkout latest upstream
+              uses: actions/checkout@v7
+              with:
+                repository: AdguardTeam/dnsproxy
+                ref: "v${{ steps.latest.outputs.version }}"
+                path: dnsproxy
+
+            - name: Setup Go
+              uses: actions/setup-go@v7
+              with:
+                # Derive the toolchain from upstream instead of hardcoding it.
+                go-version-file: dnsproxy/go.mod
+                cache: false
+
+            - name: Build latest upstream
+              working-directory: dnsproxy
+              env:
+                CGO_ENABLED: "0"
+              run: go build -o /tmp/dnsproxy-latest .
+
+            - name: Assert the CLI contract
+              run: |
+                set -eux
+                help=$(/tmp/dnsproxy-latest --help 2>&1 || true)
+
+                # Options the glue script generates.
+                for opt in --listen --port --upstream --upstream-mode \
+                           --cache --cache-size --output; do
+                    if ! printf '%s\n' "$help" | grep -q -- "$opt"; then
+                        echo "::error::upstream no longer provides $opt"
+                        exit 1
+                    fi
+                done
+
+                # --upstream-mode must still accept exactly these values.
+                for mode in load_balance parallel fastest_addr; do
+                    printf '%s\n' "$help" | grep -q -- "$mode" \
+                        || { echo "::error::upstream-mode lost '$mode'"; exit 1; }
+                done
+
+                # --cache-size must still be documented in bytes: the port
+                # converts EdgeOS' entry count into bytes.
+                if ! printf '%s\n' "$help" | grep -qi 'in bytes'; then
+                    echo "::error::--cache-size is no longer in bytes; the entry->byte conversion in vyatta-dnsproxy.pl must be revisited"
+                    exit 1
+                fi
+
+                # The port relies on start-stop-daemon for daemonisation and
+                # pid tracking, so dnsproxy must NOT grow its own equivalents.
+                for opt in --pidfile --daemon; do
+                    if printf '%s\n' "$help" | grep -q -- "$opt"; then
+                        echo "::warning::upstream now provides $opt; the start-stop-daemon based lifecycle in vyatta-dnsproxy.pl could be simplified"
+                    fi
+                done
+
+                echo "CLI contract OK for ${{ steps.latest.outputs.version }}"
