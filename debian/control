@@ -1,0 +1,5 @@
+Package: __PACKAGE_NAME__
+Version: __VERSION__-__PACKAGE_RELEASE__
+Architecture: __ARCH__
+Maintainer: Kamishirasawa-keine <kurisu3a0f@outlook.com>
+Section: net

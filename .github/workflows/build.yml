@@ -1,0 +1,95 @@
+name: Build
+
+on:
+    push:
+    pull_request:
+    workflow_dispatch:
+
+env:
+    PACKAGE_NAME: vyatta-dnsproxy
+    VERSION: "0.85.0"
+    PACKAGE_RELEASE: "1"
+    GO_VERSION: "1.27.1"
+
+permissions:
+    contents: read
+
+jobs:
+    build:
+        name: Build ${{ matrix.arch }}
+        runs-on: ubuntu-latest
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    - arch: mips
+                      goarch: mips
+                      gomips: hardfloat
+                    - arch: mipsel
+                      goarch: mipsle
+                      gomips: softfloat
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+            - name: Checkout dnsproxy
+              uses: actions/checkout@v7
+              with:
+                repository: AdguardTeam/dnsproxy
+                ref: "v${{ env.VERSION }}"
+                path: dnsproxy
+            - name: Setup Go
+              uses: actions/setup-go@v7
+              with:
+                go-version: ${{ env.GO_VERSION }}
+                cache: true
+                cache-dependency-path: dnsproxy/go.sum
+            - name: Pull dependencies
+              working-directory: dnsproxy
+              env:
+                GOTOOLCHAIN: local
+              run: go mod download
+            - name: Build
+              working-directory: dnsproxy
+              env:
+                GOOS: linux
+                GOARCH: ${{ matrix.goarch }}
+                GOMIPS: ${{ matrix.gomips }}
+                CGO_ENABLED: "0"
+                GOTOOLCHAIN: local
+                APP_VERSION: "v${{ env.VERSION }}"
+                OUT: "build/"
+              run: |
+                set -eux
+                mkdir -p build/
+                chmod +x scripts/make/go-build.sh
+                ./scripts/make/go-build.sh
+            - name: Pack
+              env:
+                PKG_DIR: "build/${{ env.PACKAGE_NAME }}-${{ matrix.arch }}-v${{ env.VERSION }}-${{ env.PACKAGE_RELEASE }}"
+              run: |
+                set -eux
+                mkdir build
+                mkdir -p ${PKG_DIR} \
+                    ${PKG_DIR}/DEBIAN \
+                    ${PKG_DIR}/usr/bin \
+                    ${PKG_DIR}/opt
+                install -m 0755 dnsproxy/build/dnsproxy ${PKG_DIR}/usr/bin/dnsproxy
+                cp -a opt/. ${PKG_DIR}/opt/
+                sed \
+                    -e "s/__PACKAGE_NAME__/${{ env.PACKAGE_NAME }}/g" \
+                    -e "s/__VERSION__/${{ env.VERSION }}/g" \
+                    -e "s/__PACKAGE_RELEASE__/${{ env.PACKAGE_RELEASE }}/g" \
+                    -e "s/__ARCH__/${{ matrix.arch }}/g" \
+                    debian/control > ${PKG_DIR}/DEBIAN/control
+                dpkg-deb --build -Zgzip --root-owner-group ${PKG_DIR} ${{ env.PACKAGE_NAME }}-${{ matrix.arch }}-v${{ env.VERSION }}-${{ env.PACKAGE_RELEASE }}.deb
+            - name: Gen checksum
+              run: |
+                set -eux
+                sha256sum *.deb > ${{ env.PACKAGE_NAME }}-${{ matrix.arch }}-v${{ env.VERSION }}-${{ env.PACKAGE_RELEASE }}.sha256
+            - name: Upload
+              uses: actions/upload-artifact@v7
+              with:
+                name: ${{ env.PACKAGE_NAME }}-${{ matrix.arch }}-${{ env.VERSION }}-${{ env.PACKAGE_RELEASE}}
+                path: |
+                    *.sha256
+                    *.deb
