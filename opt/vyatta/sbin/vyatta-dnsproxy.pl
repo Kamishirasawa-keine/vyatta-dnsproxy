@@ -10,6 +10,7 @@ use warnings;
 my $dnsproxy_bin = '/usr/bin/dnsproxy';
 my $dnsproxy_pid = '/var/run/dnsproxy.pid';
 my $dnsproxy_args = '/var/run/dnsproxy.args';
+my $dnsproxy_log = '/var/log/dnsproxy.log';
 
 my %upstream_modes = map { $_ => 1} ('load_balance', 'parallel', 'fastest_addr');
 
@@ -101,6 +102,7 @@ sub dnsproxy_get_values {
     push @args, "--upstream-mode=$upstream_mode" if defined $upstream_mode;
     push @args, "--cache"                      if $cache;
     push @args, "--cache-size=$cache_size"     if defined $cache_size && $cache;
+    push @args, "--output=$dnsproxy_log";
     push @args, "$_"                           foreach @options;
 
     return @args;
